@@ -77,13 +77,28 @@ def _run_query(request: Request, query: str ):
     }
     return response
 
-@app.post("/graph.query.delete", tags=["Graph"])  # path operation decorator
+@app.post("/graph.query.delete.topic", tags=["Graph"])  # path operation decorator
 def _run_query(request: Request, payload: QueryDel ):
     """Root endpoint."""
 
     resp = db.run("MATCH (n:Subject)-[r]->(n1) \
         where n.name=$topicName \
         DETACH DELETE n", {"topicName": payload.topic_name}).data()
+
+    response = {
+        "message": HTTPStatus.OK.phrase,
+        "status-code": HTTPStatus.OK,
+        "data" : resp
+    }
+    return response
+
+@app.post("/graph.query.delete.res", tags=["Graph"])  # path operation decorator
+def _run_query(request: Request, payload: QueryDel ):
+    """Root endpoint."""
+
+    resp = db.run("MATCH (n:Subject)-[r]->(n1:Resource) \
+        where n1.url=$topicName \
+        DETACH DELETE n1", {"topicName": payload.topic_name}).data()
 
     response = {
         "message": HTTPStatus.OK.phrase,
@@ -126,14 +141,14 @@ def _index(request: Request, ):
         
         )))
     
-    nodes, rels = get_results(results)
+    nodes, rels = get_results_v2(results)
     return {"nodes": nodes, "links": rels}
 
 
-@app.get("/graph.resources.by.subject.{subj}", tags=["Graph"])  # path operation decorator
-def _search_resources(request: Request, subj: str):
+@app.post("/graph.resources.by.subject", tags=["Graph"])  # path operation decorator
+def _search_resources(request: Request, payload: QueryDel):
 
-    subj = subj.lower()
+    subj = payload.topic_name.lower()
     """Root endpoint."""
 
     results = db.read_transaction(lambda tx: list(tx.run("MATCH (cv:Subject)-[rel]->(n:Resource) \
@@ -143,7 +158,7 @@ def _search_resources(request: Request, subj: str):
             , {"subj": subj}
         )))
     # print(results)
-    nodes, rels = get_results(results)
+    nodes, rels = get_results_v2(results)
     return {"nodes": nodes, "links": rels}
 
 def get_results(results):
@@ -162,3 +177,22 @@ def get_results(results):
         rels.append({"source": record["subjectname"] , "target": i, "label": record["r"], "id" : i, "color": "#c6dbef" })
 
     return nodes, rels
+
+def get_results_v2(results):
+    nodes = {}
+    rels = []
+    i = 0
+    nodes_ = []
+    for record in results:
+        i += 1
+        n = {"name": record["title"], "url": record["url"], "id": record["url"],"color": "#c6dbef","group": "resource", "textcolor": "black"}
+        nodes[i] = n
+        nodes_.append(n)
+        if nodes.get(record["subjectname"]) is None:
+            n = {"id": record["subjectname"], "group": "topic", "name": record["subjectname"], "color": "#4679BD", "textcolor": "white"}
+            nodes[record["subjectname"]] = n
+            nodes_.append(n)
+        
+        rels.append({"source": record["subjectname"] , "target": record["url"], "label": record["r"], "color": "#c6dbef" })
+
+    return nodes_, rels
